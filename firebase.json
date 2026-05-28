@@ -1,0 +1,42 @@
+{
+  "flutter": {
+    "platforms": {
+      "android": {
+        "default": {
+          "projectId": "crediscotia-fuerzaventas",
+          "appId": "1:746657984736:android:e75d8f03a536aff9302085",
+          "fileOutput": "android/app/google-services.json"
+        }
+      },
+      "dart": {
+        "lib/firebase_options.dart": {
+          "projectId": "crediscotia-fuerzaventas",
+          "configurations": {
+            "android": "1:746657984736:android:e75d8f03a536aff9302085",
+            "ios": "1:746657984736:ios:bf8395af7eefc8df302085",
+            "macos": "1:746657984736:ios:bf8395af7eefc8df302085",
+            "web": "1:746657984736:web:78b024ea8fa7181f302085",
+            "windows": "1:746657984736:web:10853fd10d954c2c302085"
+          }
+        }
+      }
+    }
+  },
+  "functions": [
+    {
+      "source": "functions",
+      "codebase": "default",
+      "disallowLegacyRuntimeConfig": true,
+      "ignore": [
+        "node_modules",
+        ".git",
+        "firebase-debug.log",
+        "firebase-debug.*.log",
+        "*.local"
+      ],
+      "predeploy": [
+        "npm --prefix \"$RESOURCE_DIR\" run lint"
+      ]
+    }
+  ]
+}
