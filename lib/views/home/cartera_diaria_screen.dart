@@ -24,11 +24,6 @@ class _CarteraDiariaScreenState extends State<CarteraDiariaScreen> {
   String _selectedFilter = 'Todos';
   
   @override
-  void initState() {
-    super.initState();
-  }
-  
-  @override
   void dispose() {
     _searchController.dispose();
     super.dispose();
@@ -37,7 +32,7 @@ class _CarteraDiariaScreenState extends State<CarteraDiariaScreen> {
   @override
   Widget build(BuildContext context) {
     return ChangeNotifierProvider(
-      create: (_) => CarteraViewModel()..cargarDatos(),
+      create: (_) => CarteraViewModel(),
       child: Scaffold(
         backgroundColor: Colors.grey.shade50,
         body: Consumer<CarteraViewModel>(
@@ -61,6 +56,21 @@ class _CarteraDiariaScreenState extends State<CarteraDiariaScreen> {
 
             return Column(
               children: [
+                if (vm.isOffline)
+                  Container(
+                    width: double.infinity,
+                    padding: const EdgeInsets.symmetric(vertical: 8),
+                    color: Colors.orange,
+                    child: const Row(
+                      mainAxisAlignment: MainAxisAlignment.center,
+                      children: [
+                        Icon(Icons.wifi_off, size: 16, color: Colors.white),
+                        SizedBox(width: 8),
+                        Text('Modo offline - Los datos son de caché local',
+                            style: TextStyle(color: Colors.white)),
+                      ],
+                    ),
+                  ),
                 _buildProgressBar(vm),
                 _buildFilters(vm),
                 _buildSearchBar(vm),
@@ -81,12 +91,18 @@ class _CarteraDiariaScreenState extends State<CarteraDiariaScreen> {
                 Expanded(
                   child: RefreshIndicator(
                     onRefresh: () => vm.cargarDatos(),
-                    child: ListView.builder(
-                      padding: const EdgeInsets.all(16),
+                    child: ReorderableListView.builder(
+                      onReorder: (oldIndex, newIndex) {
+                        vm.reordenarManual(oldIndex, newIndex);
+                      },
                       itemCount: vm.filteredClients.length,
                       itemBuilder: (context, index) {
                         final client = vm.filteredClients[index];
-                        return _buildClientCard(context, vm, client);
+                        return Container(
+                          key: Key(client.id),
+                          margin: const EdgeInsets.symmetric(horizontal: 16, vertical: 6),
+                          child: _buildClientCard(context, vm, client),
+                        );
                       },
                     ),
                   ),

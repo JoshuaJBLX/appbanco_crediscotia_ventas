@@ -1,6 +1,10 @@
+import 'dart:convert';
+import 'dart:io';
 import 'package:flutter/material.dart';
 import 'package:cloud_firestore/cloud_firestore.dart';
+import 'package:connectivity_plus/connectivity_plus.dart';
 import '../models/client_model.dart';
+import '../core/storage/local_db.dart';
 
 class CarteraViewModel extends ChangeNotifier {
   List<Client> _clients = [];
@@ -30,6 +34,208 @@ class CarteraViewModel extends ChangeNotifier {
   }
   
   final FirebaseFirestore _firestore = FirebaseFirestore.instance;
+  final LocalDatabase _localDb = LocalDatabase.instance;
+  
+  CarteraViewModel() {
+    _init();
+  }
+  
+  Future<void> _init() async {
+    await cargarDatos();
+    _monitorConnectivity();
+  }
+  
+  void _monitorConnectivity() {
+    Connectivity().onConnectivityChanged.listen((results) async {
+      final hasInternet = !results.contains(ConnectivityResult.none);
+      if (hasInternet && _isOffline) {
+        debugPrint('🌐 Internet recuperado - Sincronizando...');
+        await _sincronizarPendientes();
+        await cargarDatos();
+      }
+      _isOffline = !hasInternet;
+      notifyListeners();
+    });
+  }
+  
+  Future<bool> _hasInternet() async {
+    try {
+      final result = await InternetAddress.lookup('google.com');
+      return result.isNotEmpty && result[0].rawAddress.isNotEmpty;
+    } on SocketException catch (_) {
+      return false;
+    }
+  }
+  
+  Future<void> cargarDatos() async {
+    _isLoading = true;
+    notifyListeners();
+    
+    final hasNetwork = await _hasInternet();
+    
+    if (!hasNetwork) {
+      await _cargarDesdeCacheLocal();
+      _isOffline = true;
+      _isLoading = false;
+      notifyListeners();
+      return;
+    }
+    
+    try {
+      final snapshot = await _firestore.collection('clientes_perfil').get();
+      
+      final List<Client> loadedClients = [];
+      
+      for (final doc in snapshot.docs) {
+        final data = doc.data();
+        
+        final scoreDoc = await _firestore.collection('scores').doc(doc.id).get();
+        double score = 0;
+        if (scoreDoc.exists) {
+          final scoreValue = scoreDoc.data()?['score'];
+          if (scoreValue is int) {
+            score = scoreValue.toDouble();
+          } else if (scoreValue is double) {
+            score = scoreValue;
+          }
+        }
+        
+        final localStatus = await _getLocalVisitStatus(doc.id);
+        
+        final client = Client(
+          id: doc.id,
+          name: '${data['nombres'] ?? ''} ${data['apellidos'] ?? ''}'.trim(),
+          document: data['dni']?.toString() ?? '---',
+          managementType: _determinarTipoGestion(data),
+          status: localStatus ?? 'pendiente',
+          phone: data['telefono']?.toString() ?? '',
+          address: data['direccion']?.toString() ?? '',
+          debtAmount: _toDouble(data['deudaActual']),
+          score: score,
+          visitDate: localStatus != null ? DateTime.now() : null,
+        );
+        
+        loadedClients.add(client);
+      }
+      
+      _clients = loadedClients;
+      _lastSyncTime = _formatTime(DateTime.now());
+      _applyFiltersAndSearch();
+      
+      await _guardarEnCacheLocal();
+      _isOffline = false;
+      
+    } catch (e) {
+      debugPrint('Error cargando datos: $e');
+      await _cargarDesdeCacheLocal();
+    } finally {
+      _isLoading = false;
+      notifyListeners();
+    }
+  }
+  
+  Future<String?> _getLocalVisitStatus(String clientId) async {
+    try {
+      final carteraLocal = await _localDb.getCarteraLocal('asesor_001');
+      final local = carteraLocal.firstWhere(
+        (c) => c['cliente_id'] == clientId,
+        orElse: () => {},
+      );
+      return local['estado_visita'] == 'visitado' ? 'visitado' : null;
+    } catch (e) {
+      return null;
+    }
+  }
+  
+  Future<void> _guardarEnCacheLocal() async {
+    try {
+      final clientesData = _clients.map((client) => {
+        'id': client.id,
+        'asesor_id': 'asesor_001',
+        'cliente_id': client.id,
+        'cliente_nombre': client.name,
+        'cliente_dni': client.document,
+        'tipo_gestion': client.managementType,
+        'prioridad': getPrioridadText(client),
+        'score_prioridad': client.managementType == 'cobranza' ? 85 : (client.managementType == 'renovacion' ? 50 : 25),
+        'estado_visita': client.status,
+        'monto_solicitado': client.debtAmount,
+        'orden_manual': 0,
+        'sync_pending': client.status == 'visitado' ? 1 : 0,
+        'created_at': DateTime.now().millisecondsSinceEpoch,
+        'updated_at': DateTime.now().millisecondsSinceEpoch,
+      }).toList();
+      
+      await _localDb.saveCarteraLocal(clientesData);
+      debugPrint('✅ ${clientesData.length} clientes guardados en caché local');
+    } catch (e) {
+      debugPrint('❌ Error guardando en caché: $e');
+    }
+  }
+  
+  Future<void> _cargarDesdeCacheLocal() async {
+    try {
+      final cachedData = await _localDb.getCarteraLocal('asesor_001');
+      
+      if (cachedData.isNotEmpty) {
+        _clients = cachedData.map((item) => Client(
+          id: item['cliente_id'],
+          name: item['cliente_nombre'],
+          document: item['cliente_dni'],
+          managementType: item['tipo_gestion'],
+          status: item['estado_visita'],
+          phone: '',
+          address: '',
+          debtAmount: (item['monto_solicitado'] ?? 0).toDouble(),
+          visitDate: item['estado_visita'] == 'visitado' ? DateTime.now() : null,
+        )).toList();
+        
+        _applyFiltersAndSearch();
+        _isOffline = true;
+        debugPrint('✅ ${_clients.length} clientes cargados desde caché local (modo offline)');
+      } else {
+        debugPrint('⚠️ No hay datos en caché local');
+      }
+    } catch (e) {
+      debugPrint('❌ Error cargando desde caché: $e');
+    }
+  }
+  
+  Future<void> _sincronizarPendientes() async {
+    try {
+      final pendingItems = await _localDb.getPendingSyncItems();
+      
+      if (pendingItems.isEmpty) return;
+      
+      debugPrint('📤 Sincronizando ${pendingItems.length} visitas pendientes...');
+      
+      for (final item in pendingItems) {
+        try {
+          final syncData = item['data'] as Map<String, dynamic>;
+          
+          await _firestore.collection('fichas_campo').add({
+            'clienteId': syncData['clientId'],
+            'asesorId': 'asesor_001',
+            'estado': 'visitado',
+            'observacion': syncData['observacion'],
+            'fechaVisita': FieldValue.serverTimestamp(),
+            'sincronizado': true,
+          });
+          
+          await _localDb.removeFromSyncQueue(item['id']);
+          debugPrint('  ✅ Sincronizado: ${syncData['clientId']}');
+          
+        } catch (e) {
+          debugPrint('  ❌ Error sincronizando: $e');
+          await _localDb.incrementAttempts(item['id']);
+        }
+      }
+      
+      debugPrint('✅ Sincronización completada');
+    } catch (e) {
+      debugPrint('❌ Error en sincronización: $e');
+    }
+  }
   
   double _toDouble(dynamic value) {
     if (value == null) return 0.0;
@@ -52,56 +258,6 @@ class CarteraViewModel extends ChangeNotifier {
     }
     
     return 'nuevo';
-  }
-  
-  Future<void> cargarDatos() async {
-    _isLoading = true;
-    notifyListeners();
-    
-    try {
-      final snapshot = await _firestore.collection('clientes_perfil').get();
-      
-      final List<Client> loadedClients = [];
-      
-      for (final doc in snapshot.docs) {
-        final data = doc.data();
-        
-        final scoreDoc = await _firestore.collection('scores').doc(doc.id).get();
-        double score = 0;
-        if (scoreDoc.exists) {
-          final scoreValue = scoreDoc.data()?['score'];
-          if (scoreValue is int) {
-            score = scoreValue.toDouble();
-          } else if (scoreValue is double) {
-            score = scoreValue;
-          }
-        }
-        
-        final client = Client(
-          id: doc.id,
-          name: '${data['nombres'] ?? ''} ${data['apellidos'] ?? ''}'.trim(),
-          document: data['dni']?.toString() ?? '---',
-          managementType: _determinarTipoGestion(data),
-          status: 'pendiente',
-          phone: data['telefono']?.toString() ?? '',
-          address: data['direccion']?.toString() ?? '',
-          debtAmount: _toDouble(data['deudaActual']),
-          score: score,
-        );
-        
-        loadedClients.add(client);
-      }
-      
-      _clients = loadedClients;
-      _lastSyncTime = _formatTime(DateTime.now());
-      _applyFiltersAndSearch();
-      
-    } catch (e) {
-      debugPrint('Error cargando datos: $e');
-    } finally {
-      _isLoading = false;
-      notifyListeners();
-    }
   }
   
   String _formatTime(DateTime time) {
@@ -176,6 +332,26 @@ class CarteraViewModel extends ChangeNotifier {
     }
   }
   
+  void reordenarManual(int oldIndex, int newIndex) {
+    if (oldIndex == newIndex) return;
+    
+    final List<Client> newOrder = List.from(_filteredClients);
+    final client = newOrder.removeAt(oldIndex);
+    newOrder.insert(newIndex > oldIndex ? newIndex - 1 : newIndex, client);
+    
+    _filteredClients = newOrder;
+    
+    for (int i = 0; i < newOrder.length; i++) {
+      final clientId = newOrder[i].id;
+      final originalIndex = _clients.indexWhere((c) => c.id == clientId);
+      if (originalIndex != -1) {
+        _clients[originalIndex] = newOrder[i];
+      }
+    }
+    
+    notifyListeners();
+  }
+  
   Future<void> markAsVisited(String clientId, {String? observacion}) async {
     final index = _clients.indexWhere((c) => c.id == clientId);
     if (index != -1) {
@@ -193,9 +369,45 @@ class CarteraViewModel extends ChangeNotifier {
       );
       
       _applyFiltersAndSearch();
+      await _guardarEnCacheLocal();
       notifyListeners();
       
-      debugPrint('Visita marcada: $clientId - Observación: $observacion');
+      final hasNetwork = await _hasInternet();
+      
+      final syncData = {
+        'clientId': clientId,
+        'observacion': observacion ?? '',
+        'timestamp': DateTime.now().toIso8601String(),
+      };
+      
+      if (hasNetwork) {
+        try {
+          await _firestore.collection('fichas_campo').add({
+            'clienteId': clientId,
+            'asesorId': 'asesor_001',
+            'estado': 'visitado',
+            'observacion': observacion ?? '',
+            'fechaVisita': FieldValue.serverTimestamp(),
+          });
+          debugPrint('✅ Visita sincronizada con Firestore');
+        } catch (e) {
+          debugPrint('❌ Error sincronizando: $e - Guardando en cola');
+          await _localDb.addToSyncQueue(
+            operation: 'UPDATE',
+            tableName: 'cartera_local',
+            recordId: clientId,
+            data: syncData,
+          );
+        }
+      } else {
+        debugPrint('📱 Modo offline - Visita guardada en cola local');
+        await _localDb.addToSyncQueue(
+          operation: 'UPDATE',
+          tableName: 'cartera_local',
+          recordId: clientId,
+          data: syncData,
+        );
+      }
     }
   }
 }
