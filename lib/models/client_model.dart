@@ -9,7 +9,9 @@ class Client {
   final String status; // 'pendiente', 'visitado'
   final String phone;
   final String address;
-  final double debtAmount; // Monto de deuda (para cobranza)
+  final double debtAmount;
+  final double score;
+  final DateTime? visitDate;
 
   Client({
     required this.id,
@@ -20,6 +22,8 @@ class Client {
     required this.phone,
     required this.address,
     this.debtAmount = 0.0,
+    this.score = 0.0,
+    this.visitDate,
   });
 
   IconData getManagementIcon() {
@@ -59,5 +63,21 @@ class Client {
       default:
         return Colors.grey;
     }
+  }
+  
+  String getScoreText() {
+    if (score >= 85) return 'Excelente';
+    if (score >= 70) return 'Bueno';
+    if (score >= 50) return 'Regular';
+    if (score >= 30) return 'Riesgoso';
+    return 'Crítico';
+  }
+  
+  Color getScoreColor() {
+    if (score >= 85) return Colors.green;
+    if (score >= 70) return Colors.lightGreen;
+    if (score >= 50) return Colors.orange;
+    if (score >= 30) return Colors.deepOrange;
+    return Colors.red;
   }
 }

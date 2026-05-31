@@ -11,7 +11,8 @@ void main() async {
     options: DefaultFirebaseOptions.currentPlatform,
   );
 
-  runApp(const MyApp()); // 👈 Agregar 'const'
+  runApp(const MyApp()); 
+  // 👈 Agregar 'const'
 }
 
 class MyApp extends StatelessWidget {
@@ -25,3 +26,4 @@ class MyApp extends StatelessWidget {
     );
   }
 }
+

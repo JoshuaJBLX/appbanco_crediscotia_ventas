@@ -1,83 +1,182 @@
 import 'package:flutter/material.dart';
+import 'package:cloud_firestore/cloud_firestore.dart';
 import '../models/client_model.dart';
 
 class CarteraViewModel extends ChangeNotifier {
   List<Client> _clients = [];
   List<Client> get clients => _clients;
-
+  
+  List<Client> _filteredClients = [];
+  List<Client> get filteredClients => _filteredClients;
+  
+  String _searchQuery = '';
+  String _currentFilter = 'Todos';
+  
+  bool _isLoading = false;
+  bool get isLoading => _isLoading;
+  
+  bool _isOffline = false;
+  bool get isOffline => _isOffline;
+  
+  String _lastSyncTime = '';
+  String get lastSyncTime => _lastSyncTime;
+  
   int get totalVisits => _clients.where((c) => c.status == 'pendiente').length;
   int get completedVisits => _clients.where((c) => c.status == 'visitado').length;
-
-  CarteraViewModel() {
-    _loadHardcodedData();
+  
+  double get progress {
+    final total = totalVisits + completedVisits;
+    return total > 0 ? completedVisits / total : 0;
   }
-
-  void _loadHardcodedData() {
-    _clients = [
-      Client(
-        id: '1',
-        name: 'Ana Gómez',
-        document: '12345678',
-        managementType: 'renovacion',
-        status: 'pendiente',
-        phone: '987654321',
-        address: 'Av. Principal 123, Lima',
-        debtAmount: 2500.00,
-      ),
-      Client(
-        id: '2',
-        name: 'Luis Torres',
-        document: '87654321',
-        managementType: 'nuevo',
-        status: 'pendiente',
-        phone: '987654322',
-        address: 'Calle Los Pinos 456, Lima',
-        debtAmount: 0.00,
-      ),
-      Client(
-        id: '3',
-        name: 'María López',
-        document: '11223344',
-        managementType: 'cobranza',
-        status: 'visitado',
-        phone: '987654323',
-        address: 'Jr. Las Flores 789, Lima',
-        debtAmount: 5000.00,
-      ),
-      Client(
-        id: '4',
-        name: 'José Ramírez',
-        document: '44332211',
-        managementType: 'renovacion',
-        status: 'pendiente',
-        phone: '987654324',
-        address: 'Av. Universitaria 1011, Lima',
-        debtAmount: 3200.00,
-      ),
-      Client(
-        id: '5',
-        name: 'Carla Rojas',
-        document: '55667788',
-        managementType: 'nuevo',
-        status: 'pendiente',
-        phone: '987654325',
-        address: 'Calle Los Álamos 2022, Lima',
-        debtAmount: 0.00,
-      ),
-      Client(
-        id: '6',
-        name: 'Roberto Díaz',
-        document: '99887766',
-        managementType: 'cobranza',
-        status: 'pendiente',
-        phone: '987654326',
-        address: 'Av. Colonial 3033, Lima',
-        debtAmount: 7800.00,
-      ),
-    ];
+  
+  final FirebaseFirestore _firestore = FirebaseFirestore.instance;
+  
+  double _toDouble(dynamic value) {
+    if (value == null) return 0.0;
+    if (value is int) return value.toDouble();
+    if (value is double) return value;
+    if (value is num) return value.toDouble();
+    return 0.0;
   }
-
-  void markAsVisited(String clientId) {
+  
+  String _determinarTipoGestion(Map<String, dynamic> data) {
+    final deuda = _toDouble(data['deudaActual']);
+    final tipoNegocio = data['tipoNegocio']?.toString().toLowerCase() ?? '';
+    
+    if (deuda > 0) {
+      return 'cobranza';
+    }
+    
+    if (tipoNegocio == 'renovacion' || tipoNegocio.contains('renov')) {
+      return 'renovacion';
+    }
+    
+    return 'nuevo';
+  }
+  
+  Future<void> cargarDatos() async {
+    _isLoading = true;
+    notifyListeners();
+    
+    try {
+      final snapshot = await _firestore.collection('clientes_perfil').get();
+      
+      final List<Client> loadedClients = [];
+      
+      for (final doc in snapshot.docs) {
+        final data = doc.data();
+        
+        final scoreDoc = await _firestore.collection('scores').doc(doc.id).get();
+        double score = 0;
+        if (scoreDoc.exists) {
+          final scoreValue = scoreDoc.data()?['score'];
+          if (scoreValue is int) {
+            score = scoreValue.toDouble();
+          } else if (scoreValue is double) {
+            score = scoreValue;
+          }
+        }
+        
+        final client = Client(
+          id: doc.id,
+          name: '${data['nombres'] ?? ''} ${data['apellidos'] ?? ''}'.trim(),
+          document: data['dni']?.toString() ?? '---',
+          managementType: _determinarTipoGestion(data),
+          status: 'pendiente',
+          phone: data['telefono']?.toString() ?? '',
+          address: data['direccion']?.toString() ?? '',
+          debtAmount: _toDouble(data['deudaActual']),
+          score: score,
+        );
+        
+        loadedClients.add(client);
+      }
+      
+      _clients = loadedClients;
+      _lastSyncTime = _formatTime(DateTime.now());
+      _applyFiltersAndSearch();
+      
+    } catch (e) {
+      debugPrint('Error cargando datos: $e');
+    } finally {
+      _isLoading = false;
+      notifyListeners();
+    }
+  }
+  
+  String _formatTime(DateTime time) {
+    return '${time.hour.toString().padLeft(2, '0')}:${time.minute.toString().padLeft(2, '0')}';
+  }
+  
+  void setFilter(String filter) {
+    _currentFilter = filter;
+    _applyFiltersAndSearch();
+    notifyListeners();
+  }
+  
+  void setSearchQuery(String query) {
+    _searchQuery = query;
+    _applyFiltersAndSearch();
+    notifyListeners();
+  }
+  
+  void _applyFiltersAndSearch() {
+    var filtered = List<Client>.from(_clients);
+    
+    switch (_currentFilter) {
+      case 'Renovaciones':
+        filtered = filtered.where((c) => c.managementType == 'renovacion').toList();
+        break;
+      case 'Nuevas':
+        filtered = filtered.where((c) => c.managementType == 'nuevo').toList();
+        break;
+      case 'En mora':
+        filtered = filtered.where((c) => c.managementType == 'cobranza').toList();
+        break;
+      case 'Visitados':
+        filtered = filtered.where((c) => c.status == 'visitado').toList();
+        break;
+    }
+    
+    if (_searchQuery.isNotEmpty) {
+      filtered = filtered.where((c) {
+        final nombreMatch = c.name.toLowerCase().contains(_searchQuery.toLowerCase());
+        final dniMatch = c.document.endsWith(_searchQuery);
+        return nombreMatch || dniMatch;
+      }).toList();
+    }
+    
+    filtered.sort((a, b) {
+      if (a.status == 'visitado' && b.status != 'visitado') return 1;
+      if (a.status != 'visitado' && b.status == 'visitado') return -1;
+      return 0;
+    });
+    
+    _filteredClients = filtered;
+  }
+  
+  String getCensoredDni(String dni) {
+    if (dni.length <= 4) return dni;
+    final last4 = dni.substring(dni.length - 4);
+    return '***$last4';
+  }
+  
+  String getPrioridadText(Client client) {
+    if (client.managementType == 'cobranza') return 'ALTA';
+    if (client.managementType == 'renovacion') return 'MEDIA';
+    return 'NORMAL';
+  }
+  
+  Color getPrioridadColor(Client client) {
+    final prioridad = getPrioridadText(client);
+    switch (prioridad) {
+      case 'ALTA': return Colors.red;
+      case 'MEDIA': return Colors.orange;
+      default: return Colors.green;
+    }
+  }
+  
+  Future<void> markAsVisited(String clientId, {String? observacion}) async {
     final index = _clients.indexWhere((c) => c.id == clientId);
     if (index != -1) {
       _clients[index] = Client(
@@ -89,8 +188,14 @@ class CarteraViewModel extends ChangeNotifier {
         phone: _clients[index].phone,
         address: _clients[index].address,
         debtAmount: _clients[index].debtAmount,
+        score: _clients[index].score,
+        visitDate: DateTime.now(),
       );
+      
+      _applyFiltersAndSearch();
       notifyListeners();
+      
+      debugPrint('Visita marcada: $clientId - Observación: $observacion');
     }
   }
 }

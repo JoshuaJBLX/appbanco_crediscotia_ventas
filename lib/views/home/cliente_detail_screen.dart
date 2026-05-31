@@ -37,9 +37,23 @@ class ClienteDetailScreen extends StatelessWidget {
                 .doc(clienteId)
                 .get(),
             builder: (context, scoreSnapshot) {
-              final scoreData = scoreSnapshot.data?.data() as Map<String, dynamic>?;
-              final score = scoreData?['score']?.toDouble() ?? 0;
-              final segmento = scoreData?['segmento'] ?? 'Sin evaluar';
+              double score = 0;
+              String segmento = 'Sin evaluar';
+              
+              if (scoreSnapshot.hasData && scoreSnapshot.data!.exists) {
+                final scoreData = scoreSnapshot.data!.data() as Map<String, dynamic>?;
+                if (scoreData != null) {
+                  final scoreValue = scoreData['score'];
+                  if (scoreValue is int) {
+                    score = scoreValue.toDouble();
+                  } else if (scoreValue is double) {
+                    score = scoreValue;
+                  } else if (scoreValue is num) {
+                    score = scoreValue.toDouble();
+                  }
+                  segmento = scoreData['segmento']?.toString() ?? 'Sin evaluar';
+                }
+              }
 
               return SingleChildScrollView(
                 padding: const EdgeInsets.all(16),
@@ -118,6 +132,15 @@ class ClienteDetailScreen extends StatelessWidget {
   }
 
   Widget _buildInfoCard(Map<String, dynamic> data) {
+    // Conversión segura de valores
+    final nombres = data['nombres']?.toString() ?? '';
+    final apellidos = data['apellidos']?.toString() ?? '';
+    final dni = data['dni']?.toString() ?? '---';
+    final tipoNegocio = data['tipoNegocio']?.toString() ?? '---';
+    final zonaNegocio = data['zonaNegocio']?.toString() ?? '---';
+    final antiguedad = _toInt(data['antiguedadNegocio']);
+    final localPropio = data['localPropio'] == true;
+    
     return Card(
       shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(16)),
       child: Padding(
@@ -136,12 +159,12 @@ class ClienteDetailScreen extends StatelessWidget {
               ],
             ),
             const Divider(),
-            _buildInfoRow('Nombre completo', '${data['nombres']} ${data['apellidos']}'),
-            _buildInfoRow('DNI', data['dni'] ?? '---'),
-            _buildInfoRow('Tipo de negocio', data['tipoNegocio'] ?? '---'),
-            _buildInfoRow('Zona', data['zonaNegocio'] ?? '---'),
-            _buildInfoRow('Antigüedad', '${data['antiguedadNegocio'] ?? 0} meses'),
-            _buildInfoRow('Local propio', data['localPropio'] == true ? 'Sí' : 'No'),
+            _buildInfoRow('Nombre completo', '$nombres $apellidos'),
+            _buildInfoRow('DNI', dni),
+            _buildInfoRow('Tipo de negocio', tipoNegocio),
+            _buildInfoRow('Zona', zonaNegocio),
+            _buildInfoRow('Antigüedad', '$antiguedad meses'),
+            _buildInfoRow('Local propio', localPropio ? 'Sí' : 'No'),
           ],
         ),
       ),
@@ -149,9 +172,10 @@ class ClienteDetailScreen extends StatelessWidget {
   }
 
   Widget _buildFinancialCard(Map<String, dynamic> data) {
-    final ingreso = (data['ingresoMensualEst'] ?? 0).toDouble();
-    final gasto = (data['gastoMensualEst'] ?? 0).toDouble();
-    final deuda = (data['deudaActual'] ?? 0).toDouble();
+    // Conversión segura a double
+    final ingreso = _toDouble(data['ingresoMensualEst']);
+    final gasto = _toDouble(data['gastoMensualEst']);
+    final deuda = _toDouble(data['deudaActual']);
 
     return Card(
       shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(16)),
@@ -177,7 +201,7 @@ class ClienteDetailScreen extends StatelessWidget {
                 highlight: true),
             _buildInfoRow('Deuda actual', 'S/ ${deuda.toStringAsFixed(2)}'),
             _buildInfoRow('Ratio deuda/ingreso', 
-                '${((deuda / ingreso) * 100).toStringAsFixed(1)}%'),
+                ingreso > 0 ? '${((deuda / ingreso) * 100).toStringAsFixed(1)}%' : 'N/A'),
           ],
         ),
       ),
@@ -256,5 +280,23 @@ class ClienteDetailScreen extends StatelessWidget {
         ],
       ),
     );
+  }
+  
+  // Helper para conversión segura a double
+  double _toDouble(dynamic value) {
+    if (value == null) return 0.0;
+    if (value is int) return value.toDouble();
+    if (value is double) return value;
+    if (value is num) return value.toDouble();
+    return 0.0;
+  }
+  
+  // Helper para conversión segura a int
+  int _toInt(dynamic value) {
+    if (value == null) return 0;
+    if (value is int) return value;
+    if (value is double) return value.toInt();
+    if (value is num) return value.toInt();
+    return 0;
   }
 }

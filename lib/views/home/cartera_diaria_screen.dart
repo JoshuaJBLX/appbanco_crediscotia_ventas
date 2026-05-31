@@ -2,385 +2,94 @@ import 'package:flutter/material.dart';
 import 'package:provider/provider.dart';
 import '../../viewmodels/cartera_viewmodel.dart';
 import '../../theme/app_theme.dart';
-import '../auth/login_oficial_screen.dart';
 
-class CarteraDiariaScreen extends StatelessWidget {
+class CarteraDiariaScreen extends StatefulWidget {
   const CarteraDiariaScreen({super.key});
+
+  @override
+  State<CarteraDiariaScreen> createState() => _CarteraDiariaScreenState();
+}
+
+class _CarteraDiariaScreenState extends State<CarteraDiariaScreen> {
+  final TextEditingController _searchController = TextEditingController();
+  
+  final List<String> _filterOptions = [
+    'Todos',
+    'Renovaciones',
+    'Nuevas',
+    'En mora',
+    'Visitados',
+  ];
+  
+  String _selectedFilter = 'Todos';
+  
+  @override
+  void initState() {
+    super.initState();
+  }
+  
+  @override
+  void dispose() {
+    _searchController.dispose();
+    super.dispose();
+  }
 
   @override
   Widget build(BuildContext context) {
     return ChangeNotifierProvider(
-      create: (_) => CarteraViewModel(),
+      create: (_) => CarteraViewModel()..cargarDatos(),
       child: Scaffold(
         backgroundColor: Colors.grey.shade50,
         body: Consumer<CarteraViewModel>(
           builder: (context, vm, _) {
+            if (vm.isLoading) {
+              return const Center(child: CircularProgressIndicator());
+            }
+
+            if (vm.filteredClients.isEmpty && vm.clients.isEmpty) {
+              return const Center(
+                child: Column(
+                  mainAxisAlignment: MainAxisAlignment.center,
+                  children: [
+                    Icon(Icons.people_outline, size: 64, color: Colors.grey),
+                    SizedBox(height: 16),
+                    Text('No hay clientes asignados', style: TextStyle(color: Colors.grey)),
+                  ],
+                ),
+              );
+            }
+
             return Column(
               children: [
-                // Header con gradiente rojo
-                Container(
-                  decoration: BoxDecoration(
-                    gradient: const LinearGradient(
-                      colors: [CrediscotiaTheme.primary, Color(0xFFCC0000)],
-                      begin: Alignment.topLeft,
-                      end: Alignment.bottomRight,
-                    ),
-                    borderRadius: const BorderRadius.only(
-                      bottomLeft: Radius.circular(30),
-                      bottomRight: Radius.circular(30),
-                    ),
-                  ),
-                  child: SafeArea(
-                    child: Padding(
-                      padding: const EdgeInsets.all(20),
-                      child: Column(
-                        crossAxisAlignment: CrossAxisAlignment.start,
-                        children: [
-                          Row(
-                            mainAxisAlignment: MainAxisAlignment.spaceBetween,
-                            children: [
-                              Row(
-                                children: [
-                                  Container(
-                                    height: 50,
-                                    width: 50,
-                                    decoration: BoxDecoration(
-                                      color: Colors.white,
-                                      shape: BoxShape.circle,
-                                    ),
-                                    child: const Icon(
-                                      Icons.work,
-                                      color: CrediscotiaTheme.primary,
-                                      size: 28,
-                                    ),
-                                  ),
-                                  const SizedBox(width: 12),
-                                  const Column(
-                                    crossAxisAlignment: CrossAxisAlignment.start,
-                                    children: [
-                                      Text(
-                                        'Oficial de Crédito',
-                                        style: TextStyle(
-                                          color: Colors.white70,
-                                          fontSize: 12,
-                                        ),
-                                      ),
-                                      Text(
-                                        'Bienvenido',
-                                        style: TextStyle(
-                                          color: Colors.white,
-                                          fontSize: 18,
-                                          fontWeight: FontWeight.bold,
-                                        ),
-                                      ),
-                                    ],
-                                  ),
-                                ],
-                              ),
-                              IconButton(
-                                icon: const Icon(Icons.logout, color: Colors.white),
-                                onPressed: () {
-                                  Navigator.pushReplacement(
-                                    context,
-                                    MaterialPageRoute(
-                                      builder: (_) => LoginOficialScreen(),
-                                    ),
-                                  );
-                                },
-                              ),
-                            ],
-                          ),
-                          const SizedBox(height: 30),
-                          // Tarjeta de resumen
-                          Row(
-                            children: [
-                              Expanded(
-                                child: _buildSummaryCard(
-                                  Icons.pending_actions,
-                                  '${vm.totalVisits}',
-                                  'Pendientes',
-                                  Colors.white,
-                                  Colors.orange,
-                                ),
-                              ),
-                              const SizedBox(width: 16),
-                              Expanded(
-                                child: _buildSummaryCard(
-                                  Icons.check_circle,
-                                  '${vm.completedVisits}',
-                                  'Visitados',
-                                  Colors.white,
-                                  Colors.green,
-                                ),
-                              ),
-                              const SizedBox(width: 16),
-                              Expanded(
-                                child: _buildSummaryCard(
-                                  Icons.people,
-                                  '${vm.clients.length}',
-                                  'Total',
-                                  Colors.white,
-                                  Colors.blue,
-                                ),
-                              ),
-                            ],
-                          ),
-                        ],
-                      ),
-                    ),
-                  ),
-                ),
-                const SizedBox(height: 20),
-                // Título de la lista
-                const Padding(
-                  padding: EdgeInsets.symmetric(horizontal: 20),
-                  child: Row(
-                    mainAxisAlignment: MainAxisAlignment.spaceBetween,
-                    children: [
-                      Text(
-                        'Clientes asignados',
-                        style: TextStyle(
-                          fontSize: 18,
-                          fontWeight: FontWeight.bold,
+                _buildProgressBar(vm),
+                _buildFilters(vm),
+                _buildSearchBar(vm),
+                if (vm.lastSyncTime.isNotEmpty)
+                  Padding(
+                    padding: const EdgeInsets.symmetric(horizontal: 16, vertical: 4),
+                    child: Row(
+                      children: [
+                        Icon(Icons.sync, size: 12, color: Colors.grey.shade500),
+                        const SizedBox(width: 4),
+                        Text(
+                          'Última actualización: ${vm.lastSyncTime}',
+                          style: TextStyle(fontSize: 10, color: Colors.grey.shade500),
                         ),
-                      ),
-                      Text(
-                        'Hoy',
-                        style: TextStyle(
-                          fontSize: 14,
-                          color: Colors.grey,
-                        ),
-                      ),
-                    ],
+                      ],
+                    ),
                   ),
-                ),
-                const SizedBox(height: 10),
-                // Lista de clientes
                 Expanded(
-                  child: vm.clients.isEmpty
-                      ? const Center(
-                          child: Text('No hay clientes asignados'),
-                        )
-                      : ListView.builder(
-                          padding: const EdgeInsets.symmetric(horizontal: 16),
-                          itemCount: vm.clients.length,
-                          itemBuilder: (context, index) {
-                            final client = vm.clients[index];
-                            return Container(
-                              margin: const EdgeInsets.only(bottom: 12),
-                              child: Card(
-                                elevation: 2,
-                                shape: RoundedRectangleBorder(
-                                  borderRadius: BorderRadius.circular(16),
-                                ),
-                                child: InkWell(
-                                  onTap: () {
-                                    _showClientDetailDialog(context, client);
-                                  },
-                                  borderRadius: BorderRadius.circular(16),
-                                  child: Padding(
-                                    padding: const EdgeInsets.all(16),
-                                    child: Column(
-                                      crossAxisAlignment:
-                                          CrossAxisAlignment.start,
-                                      children: [
-                                        Row(
-                                          children: [
-                                            Container(
-                                              padding:
-                                                  const EdgeInsets.all(10),
-                                              decoration: BoxDecoration(
-                                                color: client
-                                                    .getManagementColor()
-                                                    .withValues(alpha: 0.1),
-                                                shape: BoxShape.circle,
-                                              ),
-                                              child: Icon(
-                                                client.getManagementIcon(),
-                                                color: client
-                                                    .getManagementColor(),
-                                                size: 20,
-                                              ),
-                                            ),
-                                            const SizedBox(width: 12),
-                                            Expanded(
-                                              child: Column(
-                                                crossAxisAlignment:
-                                                    CrossAxisAlignment.start,
-                                                children: [
-                                                  Text(
-                                                    client.name,
-                                                    style: const TextStyle(
-                                                      fontWeight:
-                                                          FontWeight.bold,
-                                                      fontSize: 16,
-                                                    ),
-                                                  ),
-                                                  const SizedBox(height: 4),
-                                                  Container(
-                                                    padding:
-                                                        const EdgeInsets.symmetric(
-                                                      horizontal: 8,
-                                                      vertical: 2,
-                                                    ),
-                                                    decoration: BoxDecoration(
-                                                      color: client
-                                                          .getManagementColor()
-                                                          .withValues(alpha: 0.1),
-                                                      borderRadius:
-                                                          BorderRadius.circular(
-                                                              12),
-                                                    ),
-                                                    child: Text(
-                                                      client
-                                                          .getManagementText(),
-                                                      style: TextStyle(
-                                                        fontSize: 11,
-                                                        color: client
-                                                            .getManagementColor(),
-                                                        fontWeight:
-                                                            FontWeight.w500,
-                                                      ),
-                                                    ),
-                                                  ),
-                                                ],
-                                              ),
-                                            ),
-                                            if (client.status == 'pendiente')
-                                              ElevatedButton(
-                                                onPressed: () =>
-                                                    _confirmVisit(
-                                                        context, vm, client),
-                                                style: ElevatedButton.styleFrom(
-                                                  backgroundColor:
-                                                      CrediscotiaTheme.primary,
-                                                  foregroundColor:
-                                                      Colors.white,
-                                                  padding:
-                                                      const EdgeInsets.symmetric(
-                                                    horizontal: 16,
-                                                    vertical: 10,
-                                                  ),
-                                                  shape: RoundedRectangleBorder(
-                                                    borderRadius:
-                                                        BorderRadius.circular(
-                                                            20),
-                                                  ),
-                                                  elevation: 0,
-                                                ),
-                                                child: const Text('Visitar'),
-                                              )
-                                            else
-                                              Container(
-                                                padding:
-                                                    const EdgeInsets.symmetric(
-                                                  horizontal: 12,
-                                                  vertical: 8,
-                                                ),
-                                                decoration: BoxDecoration(
-                                                  color: Colors.green
-                                                      .withValues(alpha: 0.1),
-                                                  borderRadius:
-                                                      BorderRadius.circular(20),
-                                                ),
-                                                child: Row(
-                                                  mainAxisSize:
-                                                      MainAxisSize.min,
-                                                  children: [
-                                                    Icon(
-                                                      Icons.check_circle,
-                                                      size: 16,
-                                                      color: Colors.green
-                                                          .shade700,
-                                                    ),
-                                                    const SizedBox(width: 4),
-                                                    Text(
-                                                      'Visitado',
-                                                      style: TextStyle(
-                                                        color: Colors.green
-                                                            .shade700,
-                                                        fontSize: 12,
-                                                      ),
-                                                    ),
-                                                  ],
-                                                ),
-                                              ),
-                                          ],
-                                        ),
-                                        const SizedBox(height: 12),
-                                        Row(
-                                          children: [
-                                            Icon(Icons.phone,
-                                                size: 14,
-                                                color: Colors.grey.shade600),
-                                            const SizedBox(width: 4),
-                                            Text(
-                                              client.phone,
-                                              style: TextStyle(
-                                                fontSize: 12,
-                                                color: Colors.grey.shade600,
-                                              ),
-                                            ),
-                                            const SizedBox(width: 16),
-                                            Icon(Icons.document_scanner,
-                                                size: 14,
-                                                color: Colors.grey.shade600),
-                                            const SizedBox(width: 4),
-                                            Text(
-                                              'DNI: ${client.document}',
-                                              style: TextStyle(
-                                                fontSize: 12,
-                                                color: Colors.grey.shade600,
-                                              ),
-                                            ),
-                                          ],
-                                        ),
-                                        if (client.managementType ==
-                                                'cobranza' &&
-                                            client.debtAmount > 0)
-                                          Padding(
-                                            padding:
-                                                const EdgeInsets.only(top: 8),
-                                            child: Container(
-                                              padding:
-                                                  const EdgeInsets.all(8),
-                                              decoration: BoxDecoration(
-                                                color: CrediscotiaTheme.primary
-                                                    .withValues(alpha: 0.05),
-                                                borderRadius:
-                                                    BorderRadius.circular(8),
-                                              ),
-                                              child: Row(
-                                                children: [
-                                                  Icon(
-                                                    Icons.attach_money,
-                                                    size: 14,
-                                                    color: CrediscotiaTheme
-                                                        .primary,
-                                                  ),
-                                                  const SizedBox(width: 4),
-                                                  Text(
-                                                    'Deuda: S/ ${client.debtAmount.toStringAsFixed(2)}',
-                                                    style: TextStyle(
-                                                      fontSize: 12,
-                                                      fontWeight:
-                                                          FontWeight.w600,
-                                                      color: CrediscotiaTheme
-                                                          .primary,
-                                                    ),
-                                                  ),
-                                                ],
-                                              ),
-                                            ),
-                                          ),
-                                      ],
-                                    ),
-                                  ),
-                                ),
-                              ),
-                            );
-                          },
-                        ),
+                  child: RefreshIndicator(
+                    onRefresh: () => vm.cargarDatos(),
+                    child: ListView.builder(
+                      padding: const EdgeInsets.all(16),
+                      itemCount: vm.filteredClients.length,
+                      itemBuilder: (context, index) {
+                        final client = vm.filteredClients[index];
+                        return _buildClientCard(context, vm, client);
+                      },
+                    ),
+                  ),
                 ),
               ],
             );
@@ -389,61 +98,323 @@ class CarteraDiariaScreen extends StatelessWidget {
       ),
     );
   }
-
-  Widget _buildSummaryCard(
-    IconData icon,
-    String value,
-    String label,
-    Color textColor,
-    Color iconColor,
-  ) {
+  
+  Widget _buildProgressBar(CarteraViewModel vm) {
+    final total = vm.completedVisits + vm.totalVisits;
+    final porcentaje = total > 0 ? (vm.completedVisits * 100 / total) : 0;
+    
     return Container(
-      padding: const EdgeInsets.all(16),
+      margin: const EdgeInsets.all(16),
+      padding: const EdgeInsets.all(12),
       decoration: BoxDecoration(
         color: Colors.white,
-        borderRadius: BorderRadius.circular(16),
+        borderRadius: BorderRadius.circular(12),
         boxShadow: [
           BoxShadow(
             color: Colors.black.withValues(alpha: 0.05),
-            blurRadius: 10,
-            offset: const Offset(0, 2),
+            blurRadius: 5,
           ),
         ],
       ),
       child: Column(
+        crossAxisAlignment: CrossAxisAlignment.start,
         children: [
-          Icon(icon, color: iconColor, size: 28),
+          Row(
+            mainAxisAlignment: MainAxisAlignment.spaceBetween,
+            children: [
+              Text(
+                'Progreso del día',
+                style: TextStyle(
+                  fontSize: 14,
+                  fontWeight: FontWeight.w600,
+                  color: Colors.grey.shade700,
+                ),
+              ),
+              Text(
+                '${vm.completedVisits} / $total visitados',
+                style: TextStyle(
+                  fontSize: 14,
+                  fontWeight: FontWeight.bold,
+                  color: CrediscotiaTheme.primary,
+                ),
+              ),
+            ],
+          ),
           const SizedBox(height: 8),
-          Text(
-            value,
-            style: TextStyle(
-              fontSize: 24,
-              fontWeight: FontWeight.bold,
-              color: textColor,
+          ClipRRect(
+            borderRadius: BorderRadius.circular(8),
+            child: LinearProgressIndicator(
+              value: vm.progress,
+              backgroundColor: Colors.grey.shade200,
+              color: CrediscotiaTheme.primary,
+              minHeight: 8,
             ),
           ),
+          const SizedBox(height: 8),
           Text(
-            label,
-            style: TextStyle(
-              fontSize: 12,
-              color: Colors.grey.shade600,
-            ),
+            '${porcentaje.toStringAsFixed(0)}% completado',
+            style: TextStyle(fontSize: 12, color: Colors.grey.shade600),
           ),
         ],
       ),
     );
   }
-
+  
+  Widget _buildFilters(CarteraViewModel vm) {
+    return SingleChildScrollView(
+      scrollDirection: Axis.horizontal,
+      padding: const EdgeInsets.symmetric(horizontal: 16),
+      child: Row(
+        children: _filterOptions.map((filter) {
+          final isSelected = _selectedFilter == filter;
+          return Padding(
+            padding: const EdgeInsets.only(right: 8),
+            child: FilterChip(
+              label: Text(filter),
+              selected: isSelected,
+              onSelected: (selected) {
+                setState(() {
+                  _selectedFilter = filter;
+                  vm.setFilter(filter);
+                });
+              },
+              selectedColor: CrediscotiaTheme.primary.withValues(alpha: 0.2),
+              checkmarkColor: CrediscotiaTheme.primary,
+            ),
+          );
+        }).toList(),
+      ),
+    );
+  }
+  
+  Widget _buildSearchBar(CarteraViewModel vm) {
+    return Padding(
+      padding: const EdgeInsets.symmetric(horizontal: 16, vertical: 8),
+      child: TextField(
+        controller: _searchController,
+        decoration: InputDecoration(
+          hintText: 'Buscar por nombre o últimos 4 dígitos del DNI',
+          prefixIcon: const Icon(Icons.search),
+          suffixIcon: _searchController.text.isNotEmpty
+              ? IconButton(
+                  icon: const Icon(Icons.clear),
+                  onPressed: () {
+                    _searchController.clear();
+                    vm.setSearchQuery('');
+                  },
+                )
+              : null,
+          border: OutlineInputBorder(
+            borderRadius: BorderRadius.circular(12),
+            borderSide: BorderSide.none,
+          ),
+          filled: true,
+          fillColor: Colors.white,
+        ),
+        onChanged: (value) {
+          vm.setSearchQuery(value);
+        },
+      ),
+    );
+  }
+  
+  Widget _buildClientCard(BuildContext context, CarteraViewModel vm, client) {
+    final prioridadText = vm.getPrioridadText(client);
+    final prioridadColor = vm.getPrioridadColor(client);
+    
+    return Card(
+      margin: const EdgeInsets.only(bottom: 12),
+      elevation: 2,
+      shape: RoundedRectangleBorder(
+        borderRadius: BorderRadius.circular(16),
+      ),
+      child: InkWell(
+        onTap: () {
+          _showClientDetailDialog(context, client);
+        },
+        borderRadius: BorderRadius.circular(16),
+        child: Padding(
+          padding: const EdgeInsets.all(16),
+          child: Column(
+            crossAxisAlignment: CrossAxisAlignment.start,
+            children: [
+              Row(
+                children: [
+                  Container(
+                    padding: const EdgeInsets.all(10),
+                    decoration: BoxDecoration(
+                      color: client.getManagementColor().withValues(alpha: 0.1),
+                      shape: BoxShape.circle,
+                    ),
+                    child: Icon(
+                      client.getManagementIcon(),
+                      color: client.getManagementColor(),
+                      size: 20,
+                    ),
+                  ),
+                  const SizedBox(width: 12),
+                  Expanded(
+                    child: Column(
+                      crossAxisAlignment: CrossAxisAlignment.start,
+                      children: [
+                        Text(
+                          client.name,
+                          style: const TextStyle(
+                            fontWeight: FontWeight.bold,
+                            fontSize: 16,
+                          ),
+                        ),
+                        const SizedBox(height: 4),
+                        Row(
+                          children: [
+                            Text(
+                              vm.getCensoredDni(client.document),
+                              style: TextStyle(
+                                fontSize: 12,
+                                color: Colors.grey.shade600,
+                              ),
+                            ),
+                            const SizedBox(width: 12),
+                            Container(
+                              padding: const EdgeInsets.symmetric(
+                                horizontal: 8,
+                                vertical: 2,
+                              ),
+                              decoration: BoxDecoration(
+                                color: client.getManagementColor().withValues(alpha: 0.1),
+                                borderRadius: BorderRadius.circular(12),
+                              ),
+                              child: Text(
+                                client.getManagementText(),
+                                style: TextStyle(
+                                  fontSize: 11,
+                                  color: client.getManagementColor(),
+                                  fontWeight: FontWeight.w500,
+                                ),
+                              ),
+                            ),
+                          ],
+                        ),
+                      ],
+                    ),
+                  ),
+                  Container(
+                    padding: const EdgeInsets.symmetric(horizontal: 8, vertical: 4),
+                    decoration: BoxDecoration(
+                      color: prioridadColor.withValues(alpha: 0.1),
+                      borderRadius: BorderRadius.circular(12),
+                      border: Border.all(color: prioridadColor),
+                    ),
+                    child: Text(
+                      prioridadText,
+                      style: TextStyle(
+                        fontSize: 10,
+                        fontWeight: FontWeight.bold,
+                        color: prioridadColor,
+                      ),
+                    ),
+                  ),
+                ],
+              ),
+              const SizedBox(height: 12),
+              if (client.debtAmount > 0)
+                Container(
+                  padding: const EdgeInsets.all(8),
+                  decoration: BoxDecoration(
+                    color: Colors.red.withValues(alpha: 0.05),
+                    borderRadius: BorderRadius.circular(8),
+                  ),
+                  child: Row(
+                    children: [
+                      Icon(Icons.warning_amber, size: 16, color: Colors.red.shade700),
+                      const SizedBox(width: 8),
+                      Text(
+                        'Deuda pendiente: S/ ${client.debtAmount.toStringAsFixed(2)}',
+                        style: TextStyle(
+                          fontSize: 12,
+                          color: Colors.red.shade700,
+                          fontWeight: FontWeight.w500,
+                        ),
+                      ),
+                    ],
+                  ),
+                ),
+              const SizedBox(height: 12),
+              if (client.status == 'pendiente')
+                SizedBox(
+                  width: double.infinity,
+                  child: ElevatedButton(
+                    onPressed: () => _confirmVisit(context, vm, client),
+                    style: ElevatedButton.styleFrom(
+                      backgroundColor: CrediscotiaTheme.primary,
+                      foregroundColor: Colors.white,
+                      padding: const EdgeInsets.symmetric(vertical: 10),
+                      shape: RoundedRectangleBorder(
+                        borderRadius: BorderRadius.circular(20),
+                      ),
+                    ),
+                    child: const Text('Marcar como visitado'),
+                  ),
+                )
+              else
+                Container(
+                  padding: const EdgeInsets.symmetric(vertical: 8),
+                  decoration: BoxDecoration(
+                    color: Colors.green.withValues(alpha: 0.1),
+                    borderRadius: BorderRadius.circular(20),
+                  ),
+                  child: Row(
+                    mainAxisAlignment: MainAxisAlignment.center,
+                    children: [
+                      const Icon(
+                        Icons.check_circle,
+                        size: 16,
+                        color: Colors.green,
+                      ),
+                      const SizedBox(width: 8),
+                      Text(
+                        'Visitado',
+                        style: TextStyle(
+                          color: Colors.green.shade700,
+                          fontWeight: FontWeight.w500,
+                        ),
+                      ),
+                    ],
+                  ),
+                ),
+            ],
+          ),
+        ),
+      ),
+    );
+  }
+  
   void _confirmVisit(BuildContext context, CarteraViewModel vm, client) {
     showDialog(
       context: context,
       builder: (BuildContext context) {
+        String? observacion;
+        
         return AlertDialog(
           shape: RoundedRectangleBorder(
             borderRadius: BorderRadius.circular(20),
           ),
           title: const Text('Confirmar Visita'),
-          content: Text('¿Desea marcar como visitado a ${client.name}?'),
+          content: Column(
+            mainAxisSize: MainAxisSize.min,
+            children: [
+              Text('¿Desea marcar como visitado a ${client.name}?'),
+              const SizedBox(height: 12),
+              TextField(
+                decoration: const InputDecoration(
+                  hintText: 'Observaciones (opcional)',
+                  border: OutlineInputBorder(),
+                ),
+                maxLines: 2,
+                onChanged: (value) => observacion = value,
+              ),
+            ],
+          ),
           actions: [
             TextButton(
               onPressed: () => Navigator.pop(context),
@@ -451,7 +422,7 @@ class CarteraDiariaScreen extends StatelessWidget {
             ),
             ElevatedButton(
               onPressed: () {
-                vm.markAsVisited(client.id);
+                vm.markAsVisited(client.id, observacion: observacion);
                 Navigator.pop(context);
                 ScaffoldMessenger.of(context).showSnackBar(
                   SnackBar(
@@ -466,9 +437,6 @@ class CarteraDiariaScreen extends StatelessWidget {
               },
               style: ElevatedButton.styleFrom(
                 backgroundColor: CrediscotiaTheme.primary,
-                shape: RoundedRectangleBorder(
-                  borderRadius: BorderRadius.circular(12),
-                ),
               ),
               child: const Text('Confirmar'),
             ),
@@ -477,7 +445,7 @@ class CarteraDiariaScreen extends StatelessWidget {
       },
     );
   }
-
+  
   void _showClientDetailDialog(BuildContext context, client) {
     showDialog(
       context: context,
@@ -500,35 +468,37 @@ class CarteraDiariaScreen extends StatelessWidget {
                 ),
               ),
               const SizedBox(width: 12),
-              Text(client.name),
+              Expanded(child: Text(client.name)),
             ],
           ),
-          content: Column(
-            mainAxisSize: MainAxisSize.min,
-            crossAxisAlignment: CrossAxisAlignment.start,
-            children: [
-              _buildDetailRow(Icons.badge, 'DNI', client.document),
-              const SizedBox(height: 8),
-              _buildDetailRow(Icons.phone, 'Teléfono', client.phone),
-              const SizedBox(height: 8),
-              _buildDetailRow(Icons.location_on, 'Dirección', client.address),
-              const SizedBox(height: 8),
-              _buildDetailRow(
-                Icons.category,
-                'Tipo de gestión',
-                client.getManagementText(),
-              ),
-              if (client.debtAmount > 0)
-                Padding(
-                  padding: const EdgeInsets.only(top: 8),
-                  child: _buildDetailRow(
-                    Icons.attach_money,
-                    'Monto de deuda',
-                    'S/ ${client.debtAmount.toStringAsFixed(2)}',
-                    isDebt: true,
-                  ),
+          content: SingleChildScrollView(
+            child: Column(
+              mainAxisSize: MainAxisSize.min,
+              crossAxisAlignment: CrossAxisAlignment.start,
+              children: [
+                _buildDetailRow(Icons.badge, 'DNI', client.document),
+                const SizedBox(height: 8),
+                _buildDetailRow(Icons.phone, 'Teléfono', client.phone),
+                const SizedBox(height: 8),
+                _buildDetailRow(Icons.location_on, 'Dirección', client.address),
+                const SizedBox(height: 8),
+                _buildDetailRow(
+                  Icons.category,
+                  'Tipo de gestión',
+                  client.getManagementText(),
                 ),
-            ],
+                if (client.debtAmount > 0)
+                  Padding(
+                    padding: const EdgeInsets.only(top: 8),
+                    child: _buildDetailRow(
+                      Icons.attach_money,
+                      'Monto de deuda',
+                      'S/ ${client.debtAmount.toStringAsFixed(2)}',
+                      isDebt: true,
+                    ),
+                  ),
+              ],
+            ),
           ),
           actions: [
             TextButton(
@@ -540,7 +510,7 @@ class CarteraDiariaScreen extends StatelessWidget {
       },
     );
   }
-
+  
   Widget _buildDetailRow(IconData icon, String label, String value,
       {bool isDebt = false}) {
     return Row(

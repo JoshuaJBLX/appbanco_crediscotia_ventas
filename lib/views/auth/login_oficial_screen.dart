@@ -3,7 +3,8 @@ import 'package:provider/provider.dart';
 
 import '../../theme/app_theme.dart';
 import '../../viewmodels/auth_oficial_viewmodel.dart';
-import '../home/dashboard_asesor_screen.dart';
+import '../home/cartera_diaria_screen.dart';
+import '../home/main_screen.dart'; 
 
 class LoginOficialScreen extends StatefulWidget {
   const LoginOficialScreen({super.key});
@@ -35,7 +36,7 @@ class _LoginOficialScreenState extends State<LoginOficialScreen> {
                 Navigator.pushReplacement(
                   context,
                   MaterialPageRoute(
-                    builder: (_) => const DashboardAsesorScreen(),
+                    builder: (_) => const MainScreen(),  // 👈 Ahora debe reconocerlo
                   ),
                 );
                 authVM.resetState();

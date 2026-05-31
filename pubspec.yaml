@@ -18,14 +18,18 @@ dependencies:
   cloud_firestore: ^4.17.0
   firebase_auth: ^4.17.0
   
-  # NO incluyas firebase_functions por ahora
-  
   # UI & State
-  provider: ^6.1.2
+  provider: ^6.1.2   # 👈 Asegúrate que diga "provider", no "inclusion"
   
   # Local Storage
   shared_preferences: ^2.2.2
   crypto: ^3.0.3
+
+  # ========== NUEVAS DEPENDENCIAS ==========
+  sqflite: ^2.3.3
+  path: ^1.9.0
+  path_provider: ^2.1.5
+  connectivity_plus: ^6.0.5
 
 dev_dependencies:
   flutter_test:
