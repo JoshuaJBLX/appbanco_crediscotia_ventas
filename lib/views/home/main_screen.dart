@@ -4,6 +4,7 @@ import 'cartera_diaria_screen.dart';
 import 'rutas_screen.dart';
 import 'clientes_screen.dart';
 import 'fichas_screen.dart';
+import 'rutas_osm_screen.dart';
 
 class MainScreen extends StatefulWidget {
   const MainScreen({super.key});
@@ -17,7 +18,8 @@ class _MainScreenState extends State<MainScreen> {
 
   final List<Widget> _screens = [
     const CarteraDiariaScreen(),
-    const RutasScreen(),
+    //const RutasScreen(),
+    const RutasOsmScreen(),
     const ClientesScreen(),
     const FichasScreen(),
   ];

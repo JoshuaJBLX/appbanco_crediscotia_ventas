@@ -1,4 +1,3 @@
-import 'dart:convert';
 import 'dart:io';
 import 'package:flutter/material.dart';
 import 'package:cloud_firestore/cloud_firestore.dart';
@@ -375,19 +374,23 @@ class CarteraViewModel extends ChangeNotifier {
       final hasNetwork = await _hasInternet();
       
       final syncData = {
-        'clientId': clientId,
+        'clienteId': clientId,
+        'clienteNombre': _clients[index].name,
         'observacion': observacion ?? '',
         'timestamp': DateTime.now().toIso8601String(),
       };
       
       if (hasNetwork) {
         try {
+          // Guardar con estructura correcta
           await _firestore.collection('fichas_campo').add({
             'clienteId': clientId,
+            'clienteNombre': _clients[index].name,
             'asesorId': 'asesor_001',
-            'estado': 'visitado',
+            'estado': 'visitado',           // 👈 Campo correcto
             'observacion': observacion ?? '',
             'fechaVisita': FieldValue.serverTimestamp(),
+            'sincronizado': true,
           });
           debugPrint('✅ Visita sincronizada con Firestore');
         } catch (e) {

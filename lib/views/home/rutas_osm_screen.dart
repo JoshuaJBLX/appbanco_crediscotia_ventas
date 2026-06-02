@@ -1,21 +1,21 @@
 import 'package:flutter/material.dart';
-import 'package:google_maps_flutter/google_maps_flutter.dart';
+import 'package:flutter_map/flutter_map.dart';
+import 'package:latlong2/latlong.dart';
 import '../../theme/app_theme.dart';
-import '../../services/directions_api_service.dart';
+import '../../services/osrm_service.dart';
 
-class RutasScreen extends StatefulWidget {
-  const RutasScreen({super.key});
+class RutasOsmScreen extends StatefulWidget {
+  const RutasOsmScreen({super.key});
 
   @override
-  State<RutasScreen> createState() => _RutasScreenState();
+  State<RutasOsmScreen> createState() => _RutasOsmScreenState();
 }
 
-class _RutasScreenState extends State<RutasScreen> {
+class _RutasOsmScreenState extends State<RutasOsmScreen> {
   bool _isLoading = true;
-  bool _optimizando = false;
-  final Set<Marker> _marcadores = {};
-  Set<Polyline> _polilineas = {};
-  GoogleMapController? _mapController;
+  final MapController _mapController = MapController();
+  List<Marker> _marcadores = [];
+  final List<Polyline> _polilineas = [];
   
   final List<Map<String, dynamic>> _ubicaciones = [
     {'nombre': 'Rosa Condori', 'prioridad': 'ALTA', 'tipo': 'Cobranza', 'lat': -12.0653, 'lng': -75.2049},
@@ -29,50 +29,46 @@ class _RutasScreenState extends State<RutasScreen> {
   void initState() {
     super.initState();
     _rutaOptimizada = List.from(_ubicaciones);
-    _cargarDatos();
+    _cargarMarcadores();
+    _cargarRutaInicial();
+    _isLoading = false;
   }
 
-  Future<void> _cargarDatos() async {
-    await Future.delayed(const Duration(seconds: 1));
-    
+  void _cargarMarcadores() {
+    _marcadores = [];
     for (var ubicacion in _ubicaciones) {
       _marcadores.add(
         Marker(
-          markerId: MarkerId(ubicacion['nombre']!),
-          position: LatLng(ubicacion['lat']!, ubicacion['lng']!),
-          infoWindow: InfoWindow(
-            title: ubicacion['nombre'],
-            snippet: '${ubicacion['tipo']} - ${ubicacion['prioridad']}',
+          width: 80,
+          height: 80,
+          point: LatLng(ubicacion['lat']!, ubicacion['lng']!),
+          child: Column(
+            children: [
+              Container(
+                padding: const EdgeInsets.all(4),
+                decoration: BoxDecoration(
+                  color: Colors.red,
+                  borderRadius: BorderRadius.circular(20),
+                ),
+                child: Text(
+                  ubicacion['nombre']!,
+                  style: const TextStyle(color: Colors.white, fontSize: 10),
+                ),
+              ),
+              const Icon(Icons.location_pin, color: Colors.red, size: 30),
+            ],
           ),
-          icon: BitmapDescriptor.defaultMarkerWithHue(BitmapDescriptor.hueRed),
         ),
       );
     }
-    
-    setState(() {
-      _isLoading = false;
-    });
+    setState(() {});
   }
 
-  Future<void> _optimizarRuta() async {
-    setState(() {
-      _optimizando = true;
-    });
-    
-    // Reordenar la lista
-    _rutaOptimizada = List.from(_ubicaciones);
-    _rutaOptimizada.sort((a, b) => a['nombre']!.compareTo(b['nombre']!));
-    
-    // Dibujar ruta real por calles
+  Future<void> _cargarRutaInicial() async {
     await _dibujarRutaReal();
-    
-    setState(() {
-      _optimizando = false;
-    });
-    
-    ScaffoldMessenger.of(context).showSnackBar(
-      const SnackBar(content: Text('Ruta optimizada - Ruta por calles dibujada')),
-    );
+    if (mounted) {
+      setState(() {});
+    }
   }
   
   Future<void> _dibujarRutaReal() async {
@@ -80,12 +76,11 @@ class _RutasScreenState extends State<RutasScreen> {
     
     _polilineas.clear();
     
-    // Construir la ruta punto por punto
     for (int i = 0; i < _rutaOptimizada.length - 1; i++) {
       final origen = _rutaOptimizada[i];
       final destino = _rutaOptimizada[i + 1];
       
-      final puntos = await DirectionsApiService.getRoutePolyline(
+      final puntos = await OsrmService.getRoutePolyline(
         originLat: origen['lat']!,
         originLng: origen['lng']!,
         destLat: destino['lat']!,
@@ -95,21 +90,16 @@ class _RutasScreenState extends State<RutasScreen> {
       if (puntos.isNotEmpty) {
         _polilineas.add(
           Polyline(
-            polylineId: PolylineId('segmento_$i'),
             points: puntos,
             color: CrediscotiaTheme.primary,
-            width: 5,
+            strokeWidth: 4,
           ),
         );
       }
     }
     
-    setState(() {});
-    
-    // Ajustar cámara para mostrar toda la ruta
-    if (_mapController != null && _rutaOptimizada.isNotEmpty) {
-      final bounds = _getBounds();
-      _mapController!.animateCamera(CameraUpdate.newLatLngBounds(bounds, 50));
+    if (mounted) {
+      setState(() {});
     }
   }
   
@@ -127,42 +117,35 @@ class _RutasScreenState extends State<RutasScreen> {
     }
     
     return LatLngBounds(
-      southwest: LatLng(minLat, minLng),
-      northeast: LatLng(maxLat, maxLng),
+      LatLng(minLat, minLng),
+      LatLng(maxLat, maxLng),
     );
   }
 
   @override
   Widget build(BuildContext context) {
     if (_isLoading) {
-      return const Center(
-        child: Column(
-          mainAxisAlignment: MainAxisAlignment.center,
-          children: [
-            CircularProgressIndicator(),
-            SizedBox(height: 16),
-            Text('Cargando mapa...'),
-          ],
-        ),
-      );
+      return const Center(child: CircularProgressIndicator());
     }
 
     return Scaffold(
       body: Stack(
         children: [
-          GoogleMap(
-            initialCameraPosition: const CameraPosition(
-              target: LatLng(-12.0653, -75.2049),
-              zoom: 13,
+          FlutterMap(
+            mapController: _mapController,
+            options: MapOptions(
+              initialCenter: const LatLng(-12.0653, -75.2049),
+              initialZoom: 13,
             ),
-            onMapCreated: (controller) {
-              _mapController = controller;
-            },
-            markers: _marcadores,
-            polylines: _polilineas,
-            myLocationEnabled: true,
-            myLocationButtonEnabled: true,
-            zoomControlsEnabled: true,
+            children: [
+              TileLayer(
+                urlTemplate: 'https://{s}.basemaps.cartocdn.com/light_all/{z}/{x}/{y}.png',
+                subdomains: const ['a', 'b', 'c'],
+                userAgentPackageName: 'com.example.appbanco_crediscotia_ventas',
+              ),
+              MarkerLayer(markers: _marcadores),
+              PolylineLayer(polylines: _polilineas),
+            ],
           ),
           
           // Panel superior
@@ -179,31 +162,29 @@ class _RutasScreenState extends State<RutasScreen> {
                 padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 8),
                 child: Row(
                   children: [
-                    Expanded(
+                    const Expanded(
                       child: Column(
                         crossAxisAlignment: CrossAxisAlignment.start,
                         children: [
-                          const Text(
+                          Text(
                             '3 pendientes',
                             style: TextStyle(fontWeight: FontWeight.bold),
                           ),
                           Text(
-                            '${_rutaOptimizada.length} en ruta',
-                            style: TextStyle(fontSize: 12, color: Colors.grey.shade600),
+                            '3 en ruta',
+                            style: TextStyle(fontSize: 12, color: Colors.grey),
                           ),
                         ],
                       ),
                     ),
                     ElevatedButton.icon(
-                      onPressed: _optimizando ? null : _optimizarRuta,
-                      icon: _optimizando
-                          ? const SizedBox(
-                              width: 18,
-                              height: 18,
-                              child: CircularProgressIndicator(strokeWidth: 2),
-                            )
-                          : const Icon(Icons.route, size: 18),
-                      label: Text(_optimizando ? 'Calculando...' : 'Optimizar'),
+                      onPressed: () async {
+                        ScaffoldMessenger.of(context).showSnackBar(
+                          const SnackBar(content: Text('Ruta optimizada')),
+                        );
+                      },
+                      icon: const Icon(Icons.route, size: 18),
+                      label: const Text('Optimizar'),
                       style: ElevatedButton.styleFrom(
                         backgroundColor: CrediscotiaTheme.primary,
                         padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 8),
@@ -215,7 +196,7 @@ class _RutasScreenState extends State<RutasScreen> {
             ),
           ),
           
-          // Lista horizontal de ubicaciones
+          // Lista horizontal
           Positioned(
             bottom: 16,
             left: 16,
@@ -241,13 +222,9 @@ class _RutasScreenState extends State<RutasScreen> {
                   
                   return GestureDetector(
                     onTap: () {
-                      _mapController?.animateCamera(
-                        CameraUpdate.newCameraPosition(
-                          CameraPosition(
-                            target: LatLng(ubicacion['lat']!, ubicacion['lng']!),
-                            zoom: 15,
-                          ),
-                        ),
+                      _mapController.move(
+                        LatLng(ubicacion['lat']!, ubicacion['lng']!),
+                        15,
                       );
                     },
                     child: Container(

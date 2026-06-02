@@ -3,7 +3,6 @@ import 'package:provider/provider.dart';
 
 import '../../theme/app_theme.dart';
 import '../../viewmodels/auth_oficial_viewmodel.dart';
-import '../home/cartera_diaria_screen.dart';
 import '../home/main_screen.dart'; 
 
 class LoginOficialScreen extends StatefulWidget {
